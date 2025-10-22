@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { Clip } from './types';
 import FileUpload from './components/FileUpload';
@@ -8,6 +8,8 @@ import ClipList from './components/ClipList';
 import CommandOutput from './components/CommandOutput';
 import InstructionsModal from './components/InstructionsModal';
 import { parsePromptForClips } from './services/geminiService';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 
 const Header: React.FC<{ onShowInstructions: () => void }> = ({ onShowInstructions }) => (
   <header className="py-6 px-4 sm:px-8 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-20 border-b border-slate-700">
@@ -39,8 +41,32 @@ function App() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [ffmpegCommands, setFfmpegCommands] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
+  
+  const [isFfmpegLoaded, setIsFfmpegLoaded] = useState(false);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+
+  useEffect(() => {
+    const loadFfmpeg = async () => {
+      const ffmpeg = new FFmpeg();
+      ffmpeg.on('log', ({ message }) => {
+        // console.log(message); // Useful for debugging, but can be noisy
+      });
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
+      try {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        ffmpegRef.current = ffmpeg;
+        setIsFfmpegLoaded(true);
+      } catch (err) {
+        console.error('Failed to load FFmpeg', err);
+        setError('Failed to load the video processing engine. Please try reloading the page.');
+      }
+    };
+    loadFfmpeg();
+  }, []);
 
   const handleFileChange = (file: File) => {
     setVideoFile(file);
@@ -49,7 +75,6 @@ function App() {
     // Reset state when a new video is uploaded
     setClips([]);
     setError(null);
-    setFfmpegCommands(null);
   };
 
   const handleProcessPrompt = async (prompt: string) => {
@@ -59,7 +84,6 @@ function App() {
     }
     setIsLoading(true);
     setError(null);
-    setFfmpegCommands(null);
     try {
       const parsedClips = await parsePromptForClips(prompt, videoDuration);
       setClips(parsedClips);
@@ -73,7 +97,6 @@ function App() {
 
   const removeClip = (index: number) => {
     setClips(clips.filter((_, i) => i !== index));
-    setFfmpegCommands(null); // Invalidate commands when clips change
   };
 
   return (
@@ -100,8 +123,19 @@ function App() {
             
             {clips.length > 0 && (
               <>
-                <ClipList clips={clips} onRemoveClip={removeClip} />
-                <CommandOutput clips={clips} fileName={videoFile.name} onCommandsGenerated={setFfmpegCommands} />
+                <ClipList 
+                  clips={clips} 
+                  onRemoveClip={removeClip} 
+                  videoFile={videoFile}
+                  ffmpeg={ffmpegRef.current}
+                  isFfmpegLoaded={isFfmpegLoaded}
+                />
+                <CommandOutput 
+                  clips={clips} 
+                  videoFile={videoFile}
+                  ffmpeg={ffmpegRef.current}
+                  isFfmpegLoaded={isFfmpegLoaded}
+                />
               </>
             )}
           </div>

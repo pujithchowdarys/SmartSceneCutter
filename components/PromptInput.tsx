@@ -1,3 +1,5 @@
+// Fix: Add DOM library reference to resolve TypeScript errors for DOM APIs.
+/// <reference lib="dom" />
 
 import React, { useState } from 'react';
 
