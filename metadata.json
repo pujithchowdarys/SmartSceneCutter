@@ -1,0 +1,5 @@
+{
+  "name": "SmartSceneCutter",
+  "description": "An AI-powered tool to cut and merge video clips based on timestamps and descriptive prompts. It parses your instructions, identifies scenes, and generates FFmpeg commands for local processing.",
+  "requestFramePermissions": []
+}
